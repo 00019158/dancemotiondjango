@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Admin — Dance Motion</title>
+  <style>
+    body{font-family:Inter,Arial;background:#e3f1fe;margin:0;padding:20px}
+    .wrap{max-width:980px;margin:0 auto}
+    .card{background:#fff;padding:16px;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.06)}
+    .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    input,select,textarea,button{padding:8px;border-radius:8px;border:1px solid #e6eef7;box-sizing:border-box}
+    button{cursor:pointer}
+    .row{display:flex;gap:8px;margin:8px 0}
+    .col{flex:1}
+    .orders{margin-top:12px}
+    .order-item{padding:8px;border-radius:8px;background:#f7fbff;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .muted{color:#6b7280}
+    .back{background:#eee;border:0;padding:8px;border-radius:8px}
+    .order-actions{display:flex;gap:8px}
+    .btn-small{padding:6px 10px;border-radius:8px;border:0;background:#e6eef7}
+    .btn-delete{background:#ffd6d6;border:1px solid #ffb3b3}
+    .admin-toolbar{display:flex;gap:8px;align-items:center}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h2>Админ-панель</h2>
+      <div class="admin-toolbar">
+        <button id="back" class="back">← Назад в магазин</button>
+        <button id="signInBtn">Войти через Google</button>
+        <button id="signOutBtn" style="display:none">Выйти</button>
+        <div id="adminEmailDisplay" class="muted" style="margin-left:10px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="adminUI" style="display:none;margin-top:12px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="flex:1">
+            <label class="muted">ID заказа (пусто — новый)</label>
+            <input id="orderId" placeholder="ID (авто)" />
+          </div>
+          <div style="flex:1">
+            <label class="muted">Email клиента</label>
+            <input id="orderEmail" placeholder="client@example.com" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label class="muted">Выберите товар</label>
+            <select id="productSelect"></select>
+          </div>
+          <div style="width:120px">
+            <label class="muted">Кол-во</label>
+            <input id="productQty" type="number" value="1" min="1" />
+          </div>
+          <div style="width:150px">
+            <label class="muted">Цена (сум)</label>
+            <input id="productPrice" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label class="muted">Имя клиента</label>
+            <input id="orderName" />
+          </div>
+          <div class="col">
+            <label class="muted">Телефон</label>
+            <input id="orderPhone" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label class="muted">Примечание</label>
+            <input id="orderNote" />
+          </div>
+          <div style="width:220px">
+            <label class="muted">Статус</label>
+            <select id="orderStatus">
+              <option>В обработке</option>
+              <option>Формируется</option>
+              <option>В доставке</option>
+              <option>Получено</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="saveOrder" style="background:#004f73;color:#fff">Создать / Обновить заказ</button>
+          <button id="clearForm">Очистить</button>
+          <button id="refreshList">Обновить список</button>
+        </div>
+
+        <div class="orders" id="ordersList" style="margin-top:10px"></div>
+
+        <div style="margin-top:10px" class="muted">При изменении статуса админ получает Telegram-уведомление (как у тебя настроено).</div>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
+
+/*  Firebase config  */
+const firebaseConfig = {
+  apiKey: "AIzaSyAgyk4fu88ZfHEXsFvpDtRHYJa2XxlPRQY",
+  authDomain: "dancemotion-40d56.firebaseapp.com",
+  projectId: "dancemotion-40d56",
+  storageBucket: "dancemotion-40d56.firebasestorage.app",
+  messagingSenderId: "1095644417326",
+  appId: "1:1095644417326:web:b32ba0116b65a7d42abebf",
+  measurementId: "G-XNGTDZQPQQ"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+
+
+const TELEGRAM_BOT_TOKEN = '8182609479:AAG7AqcB8naX92u2XlHkxwp9R9IBhEhfoW0';
+const TELEGRAM_CHAT_ID = '8492577684';
+
+const PRODUCTS = [
+  {id:1,title:'Туфли Рейтинг-Белые (Кожа)',price:350000},
+  {id:2,title:'Туфли Рейтинг - Светло-Бежевые (Сатин)',price:350000},
+  {id:3,title:'Туфли Рейтинг - Коричневые (Кожа)',price:350000},
+  {id:4,title:'Туфли Рейтинг- Красные (Кожа)',price:350000},
+  {id:5,title:'Туфли Рейтинг- Черные (Сатин)',price:350000},
+  {id:6,title:'Туфли Рейтинг- Коричневые (Сатин)',price:350000},
+];
+
+const LS_ORDERS = 'dm_orders_v1';
+
+/* ====== DOM ====== */
+const backBtn = document.getElementById('back');
+const signInBtn = document.getElementById('signInBtn');
+const signOutBtn = document.getElementById('signOutBtn');
+const adminEmailDisplay = document.getElementById('adminEmailDisplay');
+const adminUI = document.getElementById('adminUI');
+
+const productSelect = document.getElementById('productSelect');
+const productPrice = document.getElementById('productPrice');
+const productQty = document.getElementById('productQty');
+const ordersList = document.getElementById('ordersList');
+
+const orderIdInput = document.getElementById('orderId');
+const orderEmail = document.getElementById('orderEmail');
+const orderName = document.getElementById('orderName');
+const orderPhone = document.getElementById('orderPhone');
+const orderNote = document.getElementById('orderNote');
+const orderStatus = document.getElementById('orderStatus');
+const saveOrderBtn = document.getElementById('saveOrder');
+const refreshListBtn = document.getElementById('refreshList');
+const clearFormBtn = document.getElementById('clearForm');
+
+if(backBtn) backBtn.addEventListener('click', ()=> location.href = 'index.html');
+
+function buildProducts(){ productSelect.innerHTML = ''; PRODUCTS.forEach(p=>{ const opt = document.createElement('option'); opt.value = p.id; opt.textContent = `${p.title} — ${p.price.toLocaleString()} сум`; productSelect.appendChild(opt); }); productPrice.value = PRODUCTS[0].price; }
+
+productSelect.addEventListener('change', ()=> { const p = PRODUCTS.find(x=>x.id == productSelect.value); if(p) productPrice.value = p.price; });
+
+async function sendTelegram(text){
+  try{
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({chat_id: TELEGRAM_CHAT_ID, text, parse_mode:'HTML'})
+    });
+    if(!res.ok) throw new Error(await res.text());
+  }catch(e){ console.error('Telegram error', e); }
+}
+
+/* ====== Auth ====== */
+signInBtn.addEventListener('click', async ()=>{
+  try{
+    await signInWithPopup(auth, provider);
+    
+  }catch(e){ alert('Ошибка входа: ' + e.message); console.error(e); }
+});
+signOutBtn.addEventListener('click', async ()=> {
+  await signOut(auth);
+});
+
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+   
+    adminEmailDisplay.textContent = user.email;
+    signInBtn.style.display = 'none';
+    signOutBtn.style.display = '';
+    adminUI.style.display = 'block';
+    buildProducts();
+    await renderOrdersFromFirestore();
+  } else {
+    adminEmailDisplay.textContent = '';
+    signInBtn.style.display = '';
+    signOutBtn.style.display = 'none';
+    adminUI.style.display = 'none';
+    buildProducts();
+    renderOrdersFromLocal();
+  }
+});
+
+/* ====== Firestore CRUD ====== */
+async function writeOrderToFirestore(order){
+  try{
+    const id = String(order.id);
+    const payload = Object.assign({}, order, { id, updated_at: serverTimestamp(), created_at: order.created_at ? order.created_at : serverTimestamp() });
+    await setDoc(doc(db,'orders',id), payload, { merge:true });
+    return { ok:true };
+  }catch(e){
+    return { ok:false, error: e.message || String(e) };
+  }
+}
+async function readOrdersFromFirestore(){
+  try{
+    const q = query(collection(db,'orders'), orderBy('created_at','desc'));
+    const snap = await getDocs(q);
+    const out = [];
+    snap.forEach(d => { const obj = d.data(); obj.id = obj.id || d.id; out.push(obj); });
+    return out;
+  }catch(e){
+    console.error(e);
+    return [];
+  }
+}
+async function readOrderFromFirestore(id){
+  try{
+    const snap = await getDoc(doc(db,'orders',String(id)));
+    if(!snap.exists()) return null;
+    const d = snap.data(); d.id = id; return d;
+  }catch(e){ console.error(e); return null; }
+}
+
+/* ====== LocalStorage fallback ====== */
+function getOrdersLocal(){ return JSON.parse(localStorage.getItem(LS_ORDERS) || '[]'); }
+function saveOrdersLocal(list){ localStorage.setItem(LS_ORDERS, JSON.stringify(list)); }
+
+/* ====== Render orders list ====== */
+function renderOrdersLocal(){
+  const list = getOrdersLocal().slice().reverse();
+  if(list.length === 0){ ordersList.innerHTML = '<div class="muted">Пока нет заказов</div>'; return; }
+  ordersList.innerHTML = list.map(o=>`
+    <div class="order-item">
+      <div><b>ID ${o.id}</b> — ${o.name || '—'} — ${o.status || '—'}</div>
+      <div class="order-actions">
+        <button class="btn-small open-btn" data-id="${o.id}">Открыть</button>
+        <button class="btn-small btn-delete" data-id="${o.id}">Удалить</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function renderOrdersFromFirestore(){
+  const list = await readOrdersFromFirestore();
+  if(!ordersList) return;
+  if(list.length === 0){ ordersList.innerHTML = '<div class="muted">Пока нет заказов</div>'; return; }
+  ordersList.innerHTML = list.map(o=>`
+    <div class="order-item">
+      <div><b>ID ${o.id}</b> — ${o.name || '—'} — ${o.status || '—'}</div>
+      <div class="order-actions">
+        <button class="btn-small open-btn" data-id="${o.id}">Открыть</button>
+        <button class="btn-small btn-delete" data-id="${o.id}">Удалить</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ====== Open / delete / save ====== */
+function openOrderLocal(id){
+  const orders = getOrdersLocal();
+  const o = orders.find(x=>x.id === +id);
+  if(!o){ alert('Заказ не найден'); return; }
+  populateFormFromOrder(o);
+}
+async function openOrderFirestore(id){
+  const o = await readOrderFromFirestore(id);
+  if(!o){ alert('Не найден в Firestore'); return; }
+  populateFormFromOrder(o);
+}
+function populateFormFromOrder(o){
+  orderIdInput.value = o.id || '';
+  orderName.value = o.name || '';
+  orderPhone.value = o.phone || '';
+  orderEmail.value = o.email || '';
+  orderNote.value = o.note || '';
+  orderStatus.value = o.status || 'В обработке';
+  const first = (o.items && o.items[0]) || null;
+  if(first){
+    productSelect.value = first.id;
+    productPrice.value = first.price;
+    productQty.value = first.qty;
+  }
+}
+
+function deleteOrderLocal(id){
+  if(!confirm(`Удалить заказ #${id}?`)) return;
+  let arr = getOrdersLocal();
+  arr = arr.filter(o => o.id !== +id);
+  saveOrdersLocal(arr);
+  renderOrdersLocal();
+}
+
+async function deleteOrderFirestore(id){
+  if(!confirm(`Удалить заказ #${id}?`)) return;
+  try{
+    await setDoc(doc(db,'orders',String(id)), {}, { merge:true }); 
+    
+    await setDoc(doc(db,'orders',String(id)), { status: 'Удалён', updated_at: serverTimestamp() }, { merge:true });
+    await renderOrdersFromFirestore();
+  } catch(e){ console.error(e); alert('Ошибка удаления: ' + e.message); }
+}
+
+saveOrderBtn.addEventListener('click', async ()=>{
+  const pid = +productSelect.value;
+  const product = PRODUCTS.find(p=>p.id===pid) || PRODUCTS[0];
+  const qty = +productQty.value || 1;
+  const price = +productPrice.value || product.price;
+  const name = orderName.value.trim();
+  const phone = orderPhone.value.trim();
+  const email = orderEmail.value.trim();
+  const note = orderNote.value.trim();
+  const status = orderStatus.value || 'В обработке';
+  if(!name || !phone){ alert('Введите имя и телефон'); return; }
+  let id = orderIdInput.value.trim();
+  if(!id) id = (getOrdersLocal().reduce((m,o)=>Math.max(m,o.id||500),500) + 1);
+  id = +id;
+  const now = Date.now();
+  const orderData = {
+    id, name, phone, email, note, status,
+    items:[{id:pid, title:product.title, price, qty}],
+    total: price * qty, updatedAt: now, createdAt: now
+  };
+
+ 
+  const currentUser = auth.currentUser;
+  if(currentUser){
+    
+    const payload = Object.assign({}, orderData, { created_at: serverTimestamp(), updated_at: serverTimestamp() });
+    try{
+      await setDoc(doc(db,'orders', String(id)), payload, { merge:true });
+      await sendTelegram(`📝 Обновлён заказ #${id}\nИмя: ${name}\nТел: ${phone}\nСтатус: ${status}\nТовар: ${product.title} ×${qty}\nСумма: ${(price*qty).toLocaleString()} сум`);
+      alert('✅ Заказ сохранён в Firestore');
+      await renderOrdersFromFirestore();
+      return;
+    }catch(e){ console.error(e); alert('Ошибка при сохранении в Firestore: ' + e.message); }
+  }
+
+  
+  let orders = getOrdersLocal();
+  const idx = orders.findIndex(o=>o.id === id);
+  if(idx >= 0) orders[idx] = orderData; else orders.push(orderData);
+  saveOrdersLocal(orders);
+  await sendTelegram(`📝 Обновлён заказ (#${id}) — записан в локалку\nИмя: ${name}\nТел: ${phone}\nТовар: ${product.title} ×${qty}\nСумма: ${(price*qty).toLocaleString()} сум`);
+  alert('✅ Заказ сохранён локально (пользуйся Firestore через Google-аккаунт для синхронизации)');
+  renderOrdersLocal();
+});
+
+refreshListBtn.addEventListener('click', async ()=> {
+  if(auth.currentUser) await renderOrdersFromFirestore(); else renderOrdersLocal();
+});
+
+clearFormBtn.addEventListener('click', ()=> {
+  orderIdInput.value=''; orderName.value=''; orderPhone.value=''; orderEmail.value=''; orderNote.value=''; orderStatus.value='В обработке';
+  productSelect.selectedIndex=0; productPrice.value = (PRODUCTS[0] && PRODUCTS[0].price) || ''; productQty.value = 1;
+});
+
+
+ordersList.addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button');
+  if(!btn) return;
+  const id = btn.getAttribute('data-id');
+  if(!id) return;
+  if(btn.classList.contains('open-btn')){
+    if(auth.currentUser) await openOrderFirestore(id);
+    else openOrderLocal(id);
+  } else if(btn.classList.contains('btn-delete')){
+    if(auth.currentUser) await deleteOrderFirestore(id);
+    else deleteOrderLocal(id);
+  }
+});
+
+
+buildProducts();
+renderOrdersLocal();
+
+</script>
+
+</body>
+</html>

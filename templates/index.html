@@ -1,0 +1,112 @@
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dance Motion — магазин</title>
+
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+<!-- ================= PRELOADER ================= -->
+<div id="preloader">
+  <div class="loader-logo">
+    <svg class="logo-svg" viewBox="0 0 426 418">
+      <g transform="translate(0,418) scale(0.1,-0.1)" fill="none" stroke-linecap="round">
+        <path d="M1985 3149 c-44 -5 -118 -19 -163 -29 -378 -90 -708 -383 -845 -750
+        -53 -143 -70 -234 -73 -405 -6 -304 69 -540 249 -775 178 -233 414 -383 711
+        -456 91 -22 118 -24 276 -21 140 3 193 8 265 26 228 58 416 165 583 332 158
+        158 276 364 329 574 25 100 27 126 27 285 0 201 -16 288 -86 469 -96 246 -335
+        503 -586 630 -191 96 -474 146 -687 120z"/>
+      </g>
+    </svg>
+  </div>
+</div>
+<!-- =============== END PRELOADER =============== -->
+
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="brand">
+      <img class="logo" src="{% static 'images/логотип.png' %}">
+      <div>
+        <h1>Dance Motion</h1>
+        <p>Dance wear and shoes</p>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <input id="searchInput" placeholder="Поиск..." />
+      <button id="searchBtn">🔍</button>
+    </div>
+
+   <div class="right-icons">
+
+  {% if user.is_authenticated %}
+      <span style="font-weight:600; color:#004f73;">Привет, {{ user.username }}!</span>
+      <a href="{% url 'logout' %}" class="auth-btn">logout</a>
+  {% else %}
+      <a href="{% url 'login' %}" class="auth-btn">login</a>
+      <a href="{% url 'register' %}" class="auth-btn">Registration</a>
+  {% endif %}
+
+  <button id="favBtn">
+    <img src="{% static 'images/Сердце.PNG' %}" class="icon-img">
+    <span id="favCount">0</span>
+  </button>
+
+  <button id="cartBtn">
+    <img src="{% static 'images/Корзина.PNG' %}" class="icon-img">
+    <span id="cartCount">0</span>
+  </button>
+</div>
+
+  </header>
+
+  <!-- CATEGORIES -->
+  <nav id="categoryNav" class="categories"></nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="text">
+      <h2>Catalogue Dance Motion</h2>
+      <p>For every type of dance</p>
+      <button id="shopNow" class="cta">Open Catalogue </button>
+    </div>
+
+    <div class="hero-img">
+      <img src="{% static 'images/основа.png' %}">
+    </div>
+  </section>
+
+  <!-- Pprd -->
+  <h3>Catalogue</h3>
+  <div id="productsGrid" class="grid"></div>
+
+  <!-- dis -->
+  <h3>Sales</h3>
+  <div id="discountsGrid" class="grid"></div>
+
+  <footer>
+    © Dance Motion · +998(91)123-60-66 · Instagram: @dancemotion.uz
+  </footer>
+
+</div>
+
+<a href="/order/create/" class="floating-order-btn" id="orderBtn">Order</a>
+
+<script type="module" src="{% static 'js/script.js' %}"></script>
+
+<script>
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    document.getElementById("preloader").classList.add("hide");
+  }, 1000);
+});
+</script>
+
+</body>
+</html>
